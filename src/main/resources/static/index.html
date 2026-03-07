@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Care Plan Generator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #333;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 24px; }
+    label { display: block; margin-top: 14px; font-size: 0.85rem; color: #555; }
+    input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+    }
+    textarea { height: 80px; resize: vertical; }
+    button {
+      margin-top: 20px;
+      padding: 10px 24px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:disabled { background: #93c5fd; cursor: not-allowed; }
+    #loading { margin-top: 20px; color: #555; display: none; }
+    #error {
+      margin-top: 16px;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 4px;
+      padding: 12px;
+      color: #b91c1c;
+      display: none;
+    }
+    #result {
+      margin-top: 24px;
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Care Plan Generator</h1>
+
+  <form id="form">
+    <label>Patient Name</label>
+    <input name="patientName" placeholder="e.g. Jane Smith" required />
+
+    <label>MRN (6 digits)</label>
+    <input name="mrn" placeholder="e.g. 000123" pattern="[0-9]{6}" required />
+
+    <label>Medication</label>
+    <input name="medicationName" placeholder="e.g. IVIG" required />
+
+    <label>Primary Diagnosis (ICD-10)</label>
+    <input name="primaryDiagnosis" placeholder="e.g. G70.01" required />
+
+    <label>Medication History (optional)</label>
+    <textarea name="medicationHistory" placeholder="e.g. Pyridostigmine, Prednisone, Lisinopril"></textarea>
+
+    <button type="submit" id="btn">Generate Care Plan</button>
+  </form>
+
+  <div id="loading">Generating care plan, please wait...</div>
+  <div id="error"></div>
+  <pre id="result"></pre>
+
+  <script>
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const btn = document.getElementById('btn');
+      const loading = document.getElementById('loading');
+      const result = document.getElementById('result');
+      const error = document.getElementById('error');
+
+      btn.disabled = true;
+      loading.style.display = 'block';
+      result.style.display = 'none';
+      error.style.display = 'none';
+
+      const data = Object.fromEntries(new FormData(e.target));
+
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          error.textContent = json.message || 'An error occurred';
+          error.style.display = 'block';
+        } else {
+          result.style.display = 'block';
+          result.textContent = json.carePlan;
+        }
+      } catch (err) {
+        error.textContent = 'Network error. Please try again.';
+        error.style.display = 'block';
+      } finally {
+        loading.style.display = 'none';
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
