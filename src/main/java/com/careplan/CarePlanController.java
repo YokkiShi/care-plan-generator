@@ -21,6 +21,15 @@ public class CarePlanController {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+
+    @GetMapping("/api/orders/{id}")
+    public Map<String, String> getOrder(@PathVariable String id) {
+        String carePlan = store.get(id);
+        if (carePlan == null) {
+            return Map.of("error", "Care plan not found for ID: " + id);
+        }
+        return Map.of("id", id, "carePlan", carePlan);
+    }
     @PostMapping("/api/orders")
     public Map<String, String> createOrder(@RequestBody Map<String, String> input) {
         String key = input.get("mrn") + "-" + input.get("medicationName");
@@ -67,6 +76,6 @@ public class CarePlanController {
         String carePlan = response.getBody().get("content").get(0).get("text").asText();
         store.put(key, carePlan);
 
-        return Map.of("carePlan", carePlan);
+        return Map.of("id", key, "carePlan", carePlan);
     }
 }
