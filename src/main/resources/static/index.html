@@ -4,69 +4,51 @@
   <meta charset="UTF-8" />
   <title>Care Plan Generator</title>
   <style>
-    body {
-      font-family: sans-serif;
-      max-width: 700px;
-      margin: 40px auto;
-      padding: 0 20px;
-      color: #333;
-    }
-    h1 { font-size: 1.4rem; margin-bottom: 24px; }
-    label { display: block; margin-top: 14px; font-size: 0.85rem; color: #555; }
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #333; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    h2 { font-size: 0.95rem; color: #666; font-weight: normal; margin: 20px 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    label { display: block; margin-top: 12px; font-size: 0.85rem; color: #555; }
     input, textarea {
-      width: 100%;
-      padding: 8px 10px;
-      margin-top: 4px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 0.95rem;
-      box-sizing: border-box;
+      width: 100%; padding: 8px 10px; margin-top: 4px;
+      border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; box-sizing: border-box;
     }
     textarea { height: 80px; resize: vertical; }
     button {
-      margin-top: 20px;
-      padding: 10px 24px;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.95rem;
-      cursor: pointer;
+      margin-top: 20px; padding: 10px 24px; background: #2563eb;
+      color: white; border: none; border-radius: 4px; font-size: 0.95rem; cursor: pointer;
     }
     button:disabled { background: #93c5fd; cursor: not-allowed; }
     #loading { margin-top: 20px; color: #555; display: none; }
-    #error {
-      margin-top: 16px;
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      border-radius: 4px;
-      padding: 12px;
-      color: #b91c1c;
-      display: none;
-    }
-    #result {
-      margin-top: 24px;
-      background: #f8f8f8;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 16px;
-      white-space: pre-wrap;
-      font-size: 0.9rem;
-      line-height: 1.6;
-      display: none;
-    }
+    #error { margin-top: 16px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; padding: 12px; color: #b91c1c; display: none; }
+    #result { margin-top: 24px; background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 16px; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; display: none; }
+    #order-id { margin-top: 12px; font-size: 0.85rem; color: #555; display: none; }
   </style>
 </head>
 <body>
   <h1>Care Plan Generator</h1>
 
   <form id="form">
-    <label>Patient Name</label>
-    <input name="patientName" placeholder="e.g. Jane Smith" required />
+    <h2>Patient</h2>
+    <label>First Name</label>
+    <input name="firstName" placeholder="e.g. Jane" required />
+
+    <label>Last Name</label>
+    <input name="lastName" placeholder="e.g. Smith" required />
 
     <label>MRN (6 digits)</label>
     <input name="mrn" placeholder="e.g. 000123" pattern="[0-9]{6}" required />
 
+    <label>Date of Birth</label>
+    <input name="dob" type="date" required />
+
+    <h2>Provider</h2>
+    <label>Provider Name</label>
+    <input name="providerName" placeholder="e.g. Dr. Wang" required />
+
+    <label>NPI (10 digits)</label>
+    <input name="npi" placeholder="e.g. 1234567890" pattern="[0-9]{10}" required />
+
+    <h2>Order</h2>
     <label>Medication</label>
     <input name="medicationName" placeholder="e.g. IVIG" required />
 
@@ -74,13 +56,14 @@
     <input name="primaryDiagnosis" placeholder="e.g. G70.01" required />
 
     <label>Medication History (optional)</label>
-    <textarea name="medicationHistory" placeholder="e.g. Pyridostigmine, Prednisone, Lisinopril"></textarea>
+    <textarea name="medicationHistory" placeholder="e.g. Pyridostigmine, Prednisone"></textarea>
 
     <button type="submit" id="btn">Generate Care Plan</button>
   </form>
 
   <div id="loading">Generating care plan, please wait...</div>
   <div id="error"></div>
+  <div id="order-id"></div>
   <pre id="result"></pre>
 
   <script>
@@ -91,11 +74,13 @@
       const loading = document.getElementById('loading');
       const result = document.getElementById('result');
       const error = document.getElementById('error');
+      const orderIdDiv = document.getElementById('order-id');
 
       btn.disabled = true;
       loading.style.display = 'block';
       result.style.display = 'none';
       error.style.display = 'none';
+      orderIdDiv.style.display = 'none';
 
       const data = Object.fromEntries(new FormData(e.target));
 
@@ -108,12 +93,14 @@
 
         const json = await res.json();
 
-        if (!res.ok) {
-          error.textContent = json.message || 'An error occurred';
+        if (!res.ok || json.error) {
+          error.textContent = json.error || 'An error occurred';
           error.style.display = 'block';
         } else {
-          result.style.display = 'block';
+          orderIdDiv.textContent = `Order ID: ${json.orderId} | Status: ${json.status}`;
+          orderIdDiv.style.display = 'block';
           result.textContent = json.carePlan;
+          result.style.display = 'block';
         }
       } catch (err) {
         error.textContent = 'Network error. Please try again.';
