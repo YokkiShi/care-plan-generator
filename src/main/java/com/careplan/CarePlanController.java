@@ -2,36 +2,33 @@ package com.careplan;
 
 import com.careplan.model.*;
 import com.careplan.repository.*;
-import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Map;
 
 @RestController
 public class CarePlanController {
 
-    @Value("${anthropic.api.key}")
-    private String apiKey;
+    private static final String QUEUE_KEY = "careplan:queue";
 
     private final PatientRepository patientRepository;
     private final ProviderRepository providerRepository;
     private final OrderRepository orderRepository;
     private final CarePlanRepository carePlanRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final StringRedisTemplate redisTemplate;
 
     public CarePlanController(PatientRepository patientRepository,
                               ProviderRepository providerRepository,
                               OrderRepository orderRepository,
-                              CarePlanRepository carePlanRepository) {
+                              CarePlanRepository carePlanRepository,
+                              StringRedisTemplate redisTemplate) {
         this.patientRepository = patientRepository;
         this.providerRepository = providerRepository;
         this.orderRepository = orderRepository;
         this.carePlanRepository = carePlanRepository;
+        this.redisTemplate = redisTemplate;
     }
 
     @PostMapping("/api/orders")
@@ -66,34 +63,21 @@ public class CarePlanController {
         order.setMedicationHistory(input.get("medicationHistory"));
         Order savedOrder = orderRepository.save(order);
 
-        // 4. 创建 CarePlan，状态: PENDING
+        // 4. 创建 CarePlan，status = PENDING
         CarePlan carePlan = new CarePlan();
         carePlan.setOrder(savedOrder);
         carePlan.setStatus("PENDING");
         carePlan = carePlanRepository.save(carePlan);
 
-        // 5. 调用 LLM 前，状态: PROCESSING
-        carePlan.setStatus("PROCESSING");
-        carePlan = carePlanRepository.save(carePlan);
+        // 5. 把 carePlanId 放进 Redis 队列
+        redisTemplate.opsForList().leftPush(QUEUE_KEY, carePlan.getId().toString());
 
-        // 6. 调用 Claude
-        try {
-            String content = callClaude(buildPrompt(input));
-            carePlan.setContent(content);
-            carePlan.setStatus("COMPLETED");
-        } catch (Exception e) {
-            carePlan.setStatus("FAILED");
-            carePlanRepository.save(carePlan);
-            return Map.of("error", "Failed to generate care plan");
-        }
-
-        carePlanRepository.save(carePlan);
-
+        // 6. 立刻返回，不等 LLM
         return Map.of(
+                "message", "Order received",
                 "orderId", savedOrder.getId(),
                 "carePlanId", carePlan.getId(),
-                "status", carePlan.getStatus(),
-                "carePlan", carePlan.getContent()
+                "status", "PENDING"
         );
     }
 
@@ -107,51 +91,5 @@ public class CarePlanController {
                         "carePlan", cp.getContent() != null ? cp.getContent() : ""
                 ))
                 .orElse(Map.of("error", "Order not found: " + orderId));
-    }
-
-    private String buildPrompt(Map<String, String> input) {
-        return """
-                Generate a pharmacy care plan for the following patient.
-                Use exactly these 4 sections with these headers:
-
-                1. Problem List / Drug Therapy Problems
-                2. Goals (SMART format)
-                3. Pharmacist Interventions / Plan
-                4. Monitoring Plan & Lab Schedule
-
-                Patient: %s %s
-                MRN: %s
-                Medication: %s
-                Primary Diagnosis (ICD-10): %s
-                Medication History: %s
-                """.formatted(
-                input.getOrDefault("firstName", ""),
-                input.getOrDefault("lastName", ""),
-                input.getOrDefault("mrn", ""),
-                input.getOrDefault("medicationName", ""),
-                input.getOrDefault("primaryDiagnosis", ""),
-                input.getOrDefault("medicationHistory", "N/A")
-        );
-    }
-
-    private String callClaude(String prompt) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("x-api-key", apiKey);
-        headers.set("anthropic-version", "2023-06-01");
-
-        Map<String, Object> body = Map.of(
-                "model", "claude-sonnet-4-6",
-                "max_tokens", 2048,
-                "messages", List.of(Map.of("role", "user", "content", prompt))
-        );
-
-        ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-                "https://api.anthropic.com/v1/messages",
-                new HttpEntity<>(body, headers),
-                JsonNode.class
-        );
-
-        return response.getBody().get("content").get(0).get("text").asText();
     }
 }
