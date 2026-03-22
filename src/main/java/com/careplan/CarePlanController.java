@@ -92,4 +92,23 @@ public class CarePlanController {
                 ))
                 .orElse(Map.of("error", "Order not found: " + orderId));
     }
+
+    @GetMapping("/api/careplan/{carePlanId}/status")
+    public Map<String, Object> getCarePlanStatus(@PathVariable Long carePlanId) {
+        return carePlanRepository.findById(carePlanId)
+                .map(cp -> {
+                    if ("COMPLETED".equals(cp.getStatus())) {
+                        return Map.<String, Object>of(
+                                "carePlanId", carePlanId,
+                                "status", cp.getStatus(),
+                                "content", cp.getContent()
+                        );
+                    }
+                    return Map.<String, Object>of(
+                            "carePlanId", carePlanId,
+                            "status", cp.getStatus()
+                    );
+                })
+                .orElse(Map.of("error", "CarePlan not found: " + carePlanId));
+    }
 }
