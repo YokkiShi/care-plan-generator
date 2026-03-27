@@ -1,8 +1,8 @@
 package com.careplan;
 
+import com.careplan.dto.*;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 public class CarePlanController {
@@ -14,17 +14,21 @@ public class CarePlanController {
     }
 
     @PostMapping("/api/orders")
-    public Map<String, Object> createOrder(@RequestBody Map<String, String> input) {
-        return carePlanService.createOrder(input);
+    public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderRequest request) {
+        return ResponseEntity.ok(carePlanService.createOrder(request));
     }
 
     @GetMapping("/api/orders/{orderId}")
-    public Map<String, Object> getOrder(@PathVariable Long orderId) {
-        return carePlanService.getOrder(orderId);
+    public ResponseEntity<OrderStatusResponse> getOrder(@PathVariable Long orderId) {
+        return carePlanService.getOrder(orderId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/api/careplan/{carePlanId}/status")
-    public Map<String, Object> getCarePlanStatus(@PathVariable Long carePlanId) {
-        return carePlanService.getCarePlanStatus(carePlanId);
+    public ResponseEntity<CarePlanStatusResponse> getCarePlanStatus(@PathVariable Long carePlanId) {
+        return carePlanService.getCarePlanStatus(carePlanId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }

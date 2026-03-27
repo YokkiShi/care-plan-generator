@@ -1,12 +1,13 @@
 package com.careplan;
 
+import com.careplan.dto.*;
 import com.careplan.model.*;
 import com.careplan.repository.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class CarePlanService {
@@ -31,25 +32,25 @@ public class CarePlanService {
         this.redisTemplate = redisTemplate;
     }
 
-    public Map<String, Object> createOrder(Map<String, String> input) {
+    public OrderResponse createOrder(OrderRequest request) {
 
         // 1. 查找或创建 Patient
-        Patient patient = patientRepository.findById(input.get("mrn"))
+        Patient patient = patientRepository.findById(request.mrn())
                 .orElseGet(() -> {
                     Patient p = new Patient();
-                    p.setMrn(input.get("mrn"));
-                    p.setFirstName(input.get("firstName"));
-                    p.setLastName(input.get("lastName"));
-                    p.setDob(LocalDate.parse(input.get("dob")));
+                    p.setMrn(request.mrn());
+                    p.setFirstName(request.firstName());
+                    p.setLastName(request.lastName());
+                    p.setDob(LocalDate.parse(request.dob()));
                     return patientRepository.save(p);
                 });
 
         // 2. 查找或创建 Provider
-        Provider provider = providerRepository.findById(input.get("npi"))
+        Provider provider = providerRepository.findById(request.npi())
                 .orElseGet(() -> {
                     Provider pr = new Provider();
-                    pr.setNpi(input.get("npi"));
-                    pr.setName(input.get("providerName"));
+                    pr.setNpi(request.npi());
+                    pr.setName(request.providerName());
                     return providerRepository.save(pr);
                 });
 
@@ -57,9 +58,9 @@ public class CarePlanService {
         Order order = new Order();
         order.setPatient(patient);
         order.setProvider(provider);
-        order.setMedicationName(input.get("medicationName"));
-        order.setPrimaryDiagnosis(input.get("primaryDiagnosis"));
-        order.setMedicationHistory(input.get("medicationHistory"));
+        order.setMedicationName(request.medicationName());
+        order.setPrimaryDiagnosis(request.primaryDiagnosis());
+        order.setMedicationHistory(request.medicationHistory());
         Order savedOrder = orderRepository.save(order);
 
         // 4. 创建 CarePlan，status = PENDING
@@ -71,41 +72,25 @@ public class CarePlanService {
         // 5. 把 carePlanId 放进 Redis 队列
         redisTemplate.opsForList().leftPush(QUEUE_KEY, carePlan.getId().toString());
 
-        // 6. 返回响应数据
-        return Map.of(
-                "message", "Order received",
-                "orderId", savedOrder.getId(),
-                "carePlanId", carePlan.getId(),
-                "status", "PENDING"
-        );
+        return new OrderResponse("Order received", savedOrder.getId(), carePlan.getId(), "PENDING");
     }
 
-    public Map<String, Object> getOrder(Long orderId) {
+    public Optional<OrderStatusResponse> getOrder(Long orderId) {
         return carePlanRepository.findByOrderId(orderId)
-                .map(cp -> Map.<String, Object>of(
-                        "orderId", orderId,
-                        "carePlanId", cp.getId(),
-                        "status", cp.getStatus(),
-                        "carePlan", cp.getContent() != null ? cp.getContent() : ""
-                ))
-                .orElse(Map.of("error", "Order not found: " + orderId));
+                .map(cp -> new OrderStatusResponse(
+                        orderId,
+                        cp.getId(),
+                        cp.getStatus(),
+                        cp.getContent() != null ? cp.getContent() : ""
+                ));
     }
 
-    public Map<String, Object> getCarePlanStatus(Long carePlanId) {
+    public Optional<CarePlanStatusResponse> getCarePlanStatus(Long carePlanId) {
         return carePlanRepository.findById(carePlanId)
-                .map(cp -> {
-                    if ("COMPLETED".equals(cp.getStatus())) {
-                        return Map.<String, Object>of(
-                                "carePlanId", carePlanId,
-                                "status", cp.getStatus(),
-                                "content", cp.getContent()
-                        );
-                    }
-                    return Map.<String, Object>of(
-                            "carePlanId", carePlanId,
-                            "status", cp.getStatus()
-                    );
-                })
-                .orElse(Map.of("error", "CarePlan not found: " + carePlanId));
+                .map(cp -> new CarePlanStatusResponse(
+                        carePlanId,
+                        cp.getStatus(),
+                        "COMPLETED".equals(cp.getStatus()) ? cp.getContent() : null
+                ));
     }
 }
